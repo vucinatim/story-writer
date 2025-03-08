@@ -5,11 +5,10 @@ import { useNovelStore } from "@/lib/stores/novels-store";
 import { Chapter, Novel, Paragraph } from "@/lib/schemas";
 import WriterHUD from "@/components/common/writer-hud";
 import { Button } from "@/components/ui/button";
-import { Check, Info, Pencil, Plus, Trash2 } from "lucide-react";
+import { Check, Info, Pencil, Plus, Trash2, X } from "lucide-react";
 import { generateParagraph } from "../actions/generate-paragraph";
 import { readStreamableValue } from "ai/rsc";
 import { cn } from "@/lib/utils";
-import MarkdownRenderer from "@/components/common/markdown-renderer";
 import { useEditorStore } from "@/lib/stores/editor-store";
 import {
   Tooltip,
@@ -17,6 +16,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { BubbleMenu, Editor, EditorContent, FloatingMenu } from "@tiptap/react";
+import { useTipTapEditor } from "@/hooks/use-tiptap-editor";
 
 interface NovelWriterProps {
   novel: Novel;
@@ -174,10 +175,12 @@ const NovelParagraph = memo(
     const updateParagraph = useNovelStore((state) => state.updateParagraph);
     const deleteParagraph = useNovelStore((state) => state.deleteParagraph);
     const showPrevPrompt = useEditorStore((state) => state.showPrevPrompt);
+    const togglePrevPrompt = useEditorStore((state) => state.togglePrevPrompt);
     const [generatedParagraph, setGeneratedParagraph] = useState<string | null>(
       null
     );
     const [isGenerating, setIsGenerating] = useState(false);
+    const [isEdited, setIsEdited] = useState(false);
 
     const handleGenerateParagraph = async (prompt: string) => {
       setIsGenerating(true);
@@ -206,6 +209,16 @@ const NovelParagraph = memo(
       });
     };
 
+    const editor = useTipTapEditor(paragraph.content, (updatedParagraph) => {
+      console.log("updatedParagraph", updatedParagraph);
+      console.log("paragraph.content", paragraph.content);
+      if (updatedParagraph !== paragraph.content) {
+        setIsEdited(true);
+      } else {
+        setIsEdited(false);
+      }
+    });
+
     const displayedParagraph = generatedParagraph ?? paragraph.content;
 
     return (
@@ -229,16 +242,24 @@ const NovelParagraph = memo(
 
           // Only deactivate if the next focused element is outside the paragraph
           if (!paragraphRef.current?.contains(nextFocusedElement)) {
-            // onActiveChange?.(false);
+            onActiveChange?.(false);
           }
         }}
       >
         {/* Display generated paragraph */}
-        {displayedParagraph && (
-          <div className={cn("text-base text-justify pb-2")}>
+        {/* <div className={cn("text-base text-justify")}>
             <MarkdownRenderer>{displayedParagraph}</MarkdownRenderer>
-          </div>
+          </div> */}
+        {displayedParagraph && editor && (
+          <>
+            <TiptapMenu editor={editor} />
+            <EditorContent
+              editor={editor}
+              className="text-base text-justify prose max-w-none"
+            />
+          </>
         )}
+
         {showPrevPrompt && isActive && (
           <p className="text-xs text-gray-500 italic p-4 bg-zinc-50 rounded-xl">
             <span className="font-semibold not-italic">Prompt:</span>{" "}
@@ -250,9 +271,49 @@ const NovelParagraph = memo(
           paragraph={paragraph}
           chapterIndex={chapterIndex}
           paragraphIndex={paragraphIndex}
-          onDelete={() => deleteParagraph(novel.id, chapter.id, paragraph.id)}
-          onEdit={() => {}}
-          onMarkDone={() => {}}
+          actionButtons={[
+            {
+              icon: <Info />,
+              tooltip: "Show previous prompt",
+              onClick: togglePrevPrompt,
+              isActive: showPrevPrompt,
+            },
+            {
+              icon: <Trash2 />,
+              tooltip: "Delete paragraph",
+              onClick: () =>
+                deleteParagraph(novel.id, chapter.id, paragraph.id),
+            },
+            {
+              icon: <Pencil />,
+              tooltip: "Edit paragraph",
+              onClick: () => {},
+            },
+            {
+              icon: <X />,
+              tooltip: "Revert changes",
+              onClick: () => {
+                // revert all changes in the editor
+                editor?.commands.setContent(paragraph.content);
+                setIsEdited(false);
+                onActiveChange?.(false);
+              },
+            },
+            {
+              icon: <Check />,
+              tooltip: "Mark paragraph as done",
+              hidden: !isEdited,
+              onClick: () => {
+                // update paragraph in the store
+                updateParagraph(novel.id, chapter.id, paragraph.id, {
+                  content: editor?.storage.markdown.getMarkdown(),
+                });
+                setIsEdited(false);
+                // mark paragraph as done
+                onActiveChange?.(false);
+              },
+            },
+          ]}
         />
         {isActive && (
           <div>
@@ -271,14 +332,95 @@ const NovelParagraph = memo(
 
 NovelParagraph.displayName = "NovelParagraph";
 
+const TiptapMenu = memo(({ editor }: { editor: Editor }) => {
+  return (
+    <>
+      <BubbleMenu
+        className="bg-white border border-input shadow-sm rounded-full px-3 py-2 text-sm flex items-center gap-3"
+        tippyOptions={{ duration: 100 }}
+        editor={editor}
+      >
+        <button
+          onClick={() => editor.chain().focus().toggleBold().run()}
+          className={cn(
+            "hover:opacity-50",
+            editor.isActive("bold") ? "text-sky-500" : ""
+          )}
+        >
+          <span className="font-semibold">Bold</span>
+        </button>
+        <button
+          onClick={() => editor.chain().focus().toggleItalic().run()}
+          className={cn(
+            "hover:opacity-50",
+            editor.isActive("italic") ? "is-active" : ""
+          )}
+        >
+          <span className="italic">Italic</span>
+        </button>
+        <button
+          onClick={() => editor.chain().focus().toggleStrike().run()}
+          className={cn(
+            "hover:opacity-50",
+            editor.isActive("strike") ? "is-active" : ""
+          )}
+        >
+          <span className="line-through">Strike</span>
+        </button>
+      </BubbleMenu>
+
+      <FloatingMenu
+        className="floating-menu"
+        tippyOptions={{ duration: 100 }}
+        editor={editor}
+      >
+        <button
+          onClick={() =>
+            editor.chain().focus().toggleHeading({ level: 1 }).run()
+          }
+          className={
+            editor.isActive("heading", { level: 1 }) ? "is-active" : ""
+          }
+        >
+          H1
+        </button>
+        <button
+          onClick={() =>
+            editor.chain().focus().toggleHeading({ level: 2 }).run()
+          }
+          className={
+            editor.isActive("heading", { level: 2 }) ? "is-active" : ""
+          }
+        >
+          H2
+        </button>
+        <button
+          onClick={() => editor.chain().focus().toggleBulletList().run()}
+          className={editor.isActive("bulletList") ? "is-active" : ""}
+        >
+          Bullet list
+        </button>
+      </FloatingMenu>
+    </>
+  );
+});
+
+TiptapMenu.displayName = "TiptapMenu";
+
+type ActionButton = {
+  icon: React.ReactNode;
+  tooltip: string;
+  onClick: () => void;
+  isActive?: boolean;
+  hidden?: boolean;
+};
+
 interface ToolbarProps extends React.HTMLAttributes<HTMLDivElement> {
   isActive?: boolean;
   chapterIndex: number;
   paragraphIndex: number;
   paragraph: Paragraph;
-  onDelete: () => void;
-  onEdit: () => void;
-  onMarkDone: () => void;
+  actionButtons: ActionButton[];
 }
 
 const Toolbar = ({
@@ -287,13 +429,9 @@ const Toolbar = ({
   paragraph,
   chapterIndex,
   paragraphIndex,
-  onDelete,
-  onEdit,
-  onMarkDone,
+  actionButtons,
   ...props
 }: ToolbarProps) => {
-  const showPrevPrompt = useEditorStore((state) => state.showPrevPrompt);
-  const togglePrevPrompt = useEditorStore((state) => state.togglePrevPrompt);
   return (
     <div
       className={cn(
@@ -324,27 +462,20 @@ const Toolbar = ({
           </Tooltip>
         </TooltipProvider>
       </div>
-      <Button
-        data-state={showPrevPrompt ? "open" : "closed"}
-        tooltip="Show previous prompt"
-        variant="icon"
-        onClick={togglePrevPrompt}
-      >
-        <Info />
-      </Button>
-      <Button variant="icon" tooltip="Delete paragraph" onClick={onDelete}>
-        <Trash2 />
-      </Button>
-      <Button variant="icon" tooltip="Edit paragraph" onClick={onEdit}>
-        <Pencil />
-      </Button>
-      <Button
-        variant="icon"
-        tooltip="Mark paragraph as done"
-        onClick={onMarkDone}
-      >
-        <Check />
-      </Button>
+      {actionButtons.map(
+        (button) =>
+          !button.hidden && (
+            <Button
+              key={button.tooltip}
+              data-state={button.isActive ? "open" : "closed"}
+              tooltip={button.tooltip}
+              variant="icon"
+              onClick={button.onClick}
+            >
+              {button.icon}
+            </Button>
+          )
+      )}
     </div>
   );
 };

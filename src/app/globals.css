@@ -86,3 +86,8 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+/* Remove focus outline from TipTap's editor */
+.tiptap:focus-visible {
+  outline: none !important;
+}
