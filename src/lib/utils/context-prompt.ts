@@ -89,3 +89,21 @@ const getChapterContent = ({
 
   return summary;
 };
+
+interface GetCurrentParagraphContentParams {
+  novel: Novel;
+  chapterId: string;
+  paragraphId: string;
+}
+
+export const getCurrentParagraphContent = ({
+  novel,
+  chapterId,
+  paragraphId,
+}: GetCurrentParagraphContentParams) => {
+  const chapter = novel.chapters.find((ch) => ch.id === chapterId);
+  if (!chapter) return "";
+  const paragraph = chapter.paragraphs.find((p) => p.id === paragraphId);
+  if (!paragraph) return "";
+  return paragraph.content;
+};

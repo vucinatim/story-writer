@@ -1,11 +1,21 @@
+/* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { memo, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useNovelStore } from "@/lib/stores/novels-store";
 import { Chapter, Novel, Paragraph } from "@/lib/schemas";
 import WriterHUD from "@/components/common/writer-hud";
 import { Button } from "@/components/ui/button";
-import { Check, Info, Pencil, Plus, Trash2, X } from "lucide-react";
+import {
+  Check,
+  ImageIcon,
+  Info,
+  Loader2,
+  Pencil,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
 import { generateParagraph } from "../actions/generate-paragraph";
 import { readStreamableValue } from "ai/rsc";
 import { cn } from "@/lib/utils";
@@ -18,6 +28,7 @@ import {
 } from "@/components/ui/tooltip";
 import { BubbleMenu, Editor, EditorContent, FloatingMenu } from "@tiptap/react";
 import { useTipTapEditor } from "@/hooks/use-tiptap-editor";
+import { generateParagraphImage } from "../actions/generate-paragraph-image";
 
 interface NovelWriterProps {
   novel: Novel;
@@ -176,15 +187,14 @@ const NovelParagraph = memo(
     const deleteParagraph = useNovelStore((state) => state.deleteParagraph);
     const showPrevPrompt = useEditorStore((state) => state.showPrevPrompt);
     const togglePrevPrompt = useEditorStore((state) => state.togglePrevPrompt);
-    const [generatedParagraph, setGeneratedParagraph] = useState<string | null>(
-      null
-    );
-    const [isGenerating, setIsGenerating] = useState(false);
+    const [generatedText, setGeneratedText] = useState<string | null>(null);
+    const [isGeneratingText, setIsGeneratingText] = useState(false);
+    const [isGeneratingImage, setIsGeneratingImage] = useState(false);
     const [isEdited, setIsEdited] = useState(false);
 
     const handleGenerateParagraph = async (prompt: string) => {
-      setIsGenerating(true);
-      setGeneratedParagraph("");
+      setIsGeneratingText(true);
+      setGeneratedText("");
 
       let newParagraph = ""; // Local variable to store the generated text
 
@@ -197,11 +207,11 @@ const NovelParagraph = memo(
 
       for await (const delta of readStreamableValue(output)) {
         newParagraph += delta; // Append streamed content to local variable
-        setGeneratedParagraph(newParagraph); // Update state
+        setGeneratedText(newParagraph); // Update state
       }
 
-      setIsGenerating(false);
-      setGeneratedParagraph(null);
+      setIsGeneratingText(false);
+      setGeneratedText(null);
 
       updateParagraph(novel.id, chapter.id, paragraph.id, {
         content: newParagraph, // Use local variable instead of state
@@ -209,7 +219,24 @@ const NovelParagraph = memo(
       });
     };
 
-    const editor = useTipTapEditor(paragraph.content, (updatedParagraph) => {
+    const handleGenerateImage = async () => {
+      setIsGeneratingImage(true);
+      const base64Image = await generateParagraphImage({
+        novel,
+        chapterId: chapter.id,
+        paragraphId: paragraph.id,
+      });
+      if (base64Image) {
+        updateParagraph(novel.id, chapter.id, paragraph.id, {
+          image: `data:image/png;base64,${base64Image}`,
+        });
+      }
+      setIsGeneratingImage(false);
+    };
+
+    const displayedParagraph = generatedText ?? paragraph.content;
+
+    const editor = useTipTapEditor(displayedParagraph, (updatedParagraph) => {
       console.log("updatedParagraph", updatedParagraph);
       console.log("paragraph.content", paragraph.content);
       if (updatedParagraph !== paragraph.content) {
@@ -219,7 +246,10 @@ const NovelParagraph = memo(
       }
     });
 
-    const displayedParagraph = generatedParagraph ?? paragraph.content;
+    // Update editor content when displayedParagraph changes
+    useEffect(() => {
+      editor?.commands.setContent(displayedParagraph);
+    }, [displayedParagraph, editor]);
 
     return (
       <div
@@ -246,16 +276,33 @@ const NovelParagraph = memo(
           }
         }}
       >
+        {/* Display Generated Image */}
+        <div>
+          {isGeneratingImage && (
+            <div className="relative w-full flex flex-col gap-y-4 mb-4 items-center text-zinc-400 justify-center aspect-square animate-pulse bg-zinc-100 rounded-2xl">
+              <ImageIcon className="w-10 h-10" />
+              <p>Generating image...</p>
+            </div>
+          )}
+          {!isGeneratingImage && paragraph.image && (
+            <img
+              src={paragraph.image}
+              alt="Generated Image"
+              className="rounded-2xl shadow-md mb-4"
+            />
+          )}
+        </div>
+
         {/* Display generated paragraph */}
         {/* <div className={cn("text-base text-justify")}>
             <MarkdownRenderer>{displayedParagraph}</MarkdownRenderer>
           </div> */}
-        {displayedParagraph && editor && (
+        {editor && (
           <>
             <TiptapMenu editor={editor} />
             <EditorContent
               editor={editor}
-              className="text-base text-justify prose max-w-none"
+              className="text-base text-justify prose !mt-0 max-w-none"
             />
           </>
         )}
@@ -279,15 +326,25 @@ const NovelParagraph = memo(
               isActive: showPrevPrompt,
             },
             {
-              icon: <Trash2 />,
-              tooltip: "Delete paragraph",
-              onClick: () =>
-                deleteParagraph(novel.id, chapter.id, paragraph.id),
+              icon: isGeneratingImage ? (
+                <Loader2 className="animate-spin" />
+              ) : (
+                <ImageIcon />
+              ),
+              tooltip: "Generate illustration",
+              onClick: handleGenerateImage,
+              disabled: isGeneratingImage,
             },
             {
               icon: <Pencil />,
               tooltip: "Edit paragraph",
               onClick: () => {},
+            },
+            {
+              icon: <Trash2 />,
+              tooltip: "Delete paragraph",
+              onClick: () =>
+                deleteParagraph(novel.id, chapter.id, paragraph.id),
             },
             {
               icon: <X />,
@@ -321,7 +378,7 @@ const NovelParagraph = memo(
               paragraph={paragraph}
               placeholder="What should this paragraph be about?"
               onSubmit={handleGenerateParagraph}
-              isGenerating={isGenerating}
+              isGenerating={isGeneratingText}
             />
           </div>
         )}
@@ -412,6 +469,7 @@ type ActionButton = {
   tooltip: string;
   onClick: () => void;
   isActive?: boolean;
+  disabled?: boolean;
   hidden?: boolean;
 };
 
@@ -468,6 +526,7 @@ const Toolbar = ({
             <Button
               key={button.tooltip}
               data-state={button.isActive ? "open" : "closed"}
+              disabled={button.disabled}
               tooltip={button.tooltip}
               variant="icon"
               onClick={button.onClick}

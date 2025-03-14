@@ -31,6 +31,7 @@ export const ParagraphSchema = z.object({
   content: z.string().min(1, "Content cannot be empty"),
   prompt: z.string().min(1, "Prompt cannot be empty"),
   suggestions: z.array(ContinuationSuggestionSchema).min(3).max(3).optional(),
+  image: z.string().optional(),
   createdAt: z.string().datetime(),
   editedAt: z.string().datetime(),
 });

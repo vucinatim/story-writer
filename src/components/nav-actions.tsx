@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { MoreHorizontal, Settings, Star, Trash2 } from "lucide-react";
+import { Download, MoreHorizontal, Settings, Star, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -35,6 +35,7 @@ import {
 import { useState } from "react";
 import { useEditorStore } from "@/lib/stores/editor-store";
 import { cn } from "@/lib/utils";
+import { exportAsPDF } from "@/app/actions/export-as-pdf";
 
 export function NavActions() {
   const router = useRouter();
@@ -54,6 +55,15 @@ export function NavActions() {
         label: "Delete Novel",
         icon: Trash2,
         onClick: () => setShowDeleteDialog(true),
+      },
+      {
+        label: "Export as PDF",
+        icon: Download,
+        onClick: () => {
+          if (novel) {
+            exportAsPDF(novel);
+          }
+        },
       },
     ],
   ];

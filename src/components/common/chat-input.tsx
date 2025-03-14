@@ -116,7 +116,7 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
                       onInput={adjustHeight}
                       placeholder={placeholder || "Ask the AI..."}
                       className={cn(
-                        "w-full resize-none pr-14 bg-transparent border-none shadow-none focus-visible:outline-none focus-visible:ring-transparent"
+                        "w-full resize-none pr-12 bg-transparent border-none shadow-none focus-visible:outline-none focus-visible:ring-transparent"
                       )}
                       rows={1} // Start with 1 row
                       style={{
@@ -134,7 +134,7 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
               type="submit"
               disabled={isGenerating}
               size="icon"
-              className="absolute right-2 top-2 rounded-full bg-zinc-400"
+              className="absolute right-0 rounded-full bg-zinc-400"
             >
               <ArrowUp className="w-4 h-4" />
             </Button>
